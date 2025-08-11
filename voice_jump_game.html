@@ -49,6 +49,7 @@
     }
     .lastspeech{color:var(--muted);font-size:.95rem;margin-top:6px}
     .overlay{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+    .overlay[hidden]{display:none}
     .bubble{pointer-events:auto;max-width:560px;background:rgba(10,15,31,.9);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:22px;box-shadow:var(--shadow);text-align:center;margin:0 16px}
     .title{margin:0 0 8px 0;font-size:clamp(1.3rem,4.5vw,2.2rem)}
     .subtitle{color:var(--muted);margin:0 0 14px 0}
@@ -194,9 +195,9 @@
     function showOverlay(title, msg){
       document.getElementById('overlayTitle').textContent = title;
       document.getElementById('overlayMsg').innerHTML = msg;
-      overlay.removeAttribute('hidden');
+      overlay.hidden = false;
     }
-    function hideOverlay(){ overlay.setAttribute('hidden','hidden'); }
+    function hideOverlay(){ overlay.hidden = true; }
 
     function setDifficulty(){
       const d = DIFF[diffSel.value]||DIFF.normal;
