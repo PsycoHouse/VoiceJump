@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice Jump – Sag das Wort zum Springen</title>
+  <style>
+    :root{
+      --bg:#0c1022;
+      --panel:#141b2f;
+      --fg:#eaf0ff;
+      --muted:#9aa3b2;
+      --acc:#7cc6ff;
+      --ok:#7dffb0;
+      --warn:#ffd166;
+      --danger:#ff6b6b;
+      --radius:18px;
+      --shadow:0 12px 36px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:radial-gradient(1000px 600px at 70% -200px,#1a2240,var(--bg));color:var(--fg);
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    .wrap{max-width:1100px;margin:20px auto;padding:16px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    h1{margin:0;font-size:clamp(1.2rem,3.2vw,2rem);display:flex;align-items:center;gap:.6ch}
+    .badge{font-size:.8rem;color:#061525;background:linear-gradient(135deg,var(--ok),var(--acc));padding:4px 10px;border-radius:999px;font-weight:800}
+    .panel{margin-top:14px;background:rgba(20,27,47,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.07);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+    .hud{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;font-variant-numeric:tabular-nums}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;display:grid;gap:6px}
+    .label{color:var(--muted);font-size:.85rem}
+    .value{font-size:1.1rem;font-weight:800}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+    select,button{background:var(--panel);color:var(--fg);border:1px solid rgba(255,255,255,.12);padding:10px 14px;border-radius:12px;cursor:pointer}
+    button:hover,select:hover{border-color:rgba(255,255,255,.25)}
+    .micdot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:#999}
+    .mic-on{background:var(--ok)}
+    .mic-off{background:#999}
+    .mic-err{background:var(--danger)}
+    canvas{width:100%;height:auto;display:block;border-radius:18px;border:1px solid rgba(255,255,255,.09);box-shadow:var(--shadow);
+      background:
+        radial-gradient(800px 400px at 0% 0%, rgba(124,198,255,.06), transparent),
+        radial-gradient(800px 400px at 100% 0%, rgba(125,255,176,.05), transparent),
+        radial-gradient(1200px 800px at 50% 120%, rgba(255,107,107,.07), transparent),
+        #0a0f1f;}
+    .word{
+      text-align:center;font-weight:900;font-size:clamp(1.1rem,3.2vw,1.8rem);margin:6px 0 10px;
+      background:linear-gradient(90deg,var(--ok),var(--acc));-webkit-background-clip:text;background-clip:text;color:transparent;
+      letter-spacing:.6px;
+    }
+    .lastspeech{color:var(--muted);font-size:.95rem;margin-top:6px}
+    .overlay{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+    .bubble{pointer-events:auto;max-width:560px;background:rgba(10,15,31,.9);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:22px;box-shadow:var(--shadow);text-align:center;margin:0 16px}
+    .title{margin:0 0 8px 0;font-size:clamp(1.3rem,4.5vw,2.2rem)}
+    .subtitle{color:var(--muted);margin:0 0 14px 0}
+    .bubble .row{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+    .bubble .row button.primary{background:linear-gradient(135deg,var(--acc),#a4e5ff);color:#04223a;border:none;font-weight:900}
+    .abs{position:relative}
+    .help{color:var(--muted);font-size:.95rem;line-height:1.45}
+    @media (max-width: 900px){ .hud{grid-template-columns:repeat(2,1fr)} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🎙️ Voice Jump <span class="badge">Sag das Wort, spring!</span></h1>
+      <div>
+        <span class="micdot mic-off" id="micdot" aria-hidden="true"></span>
+        <span id="micStatus">Mikro aus</span>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="hud">
+        <div class="card"><div class="label">Distanz</div><div class="value" id="score">0</div></div>
+        <div class="card"><div class="label">Bestwert</div><div class="value" id="best">0</div></div>
+        <div class="card"><div class="label">Leben</div><div class="value" id="lives">3</div></div>
+        <div class="card"><div class="label">Geschw.</div><div class="value" id="speed">0</div></div>
+        <div class="card"><div class="label">Letzter Text</div><div class="value" id="heard">—</div></div>
+      </div>
+
+      <div class="controls">
+        <label for="difficulty" class="label">Schwierigkeit:</label>
+        <select id="difficulty" aria-label="Schwierigkeit">
+          <option value="easy">Leicht</option>
+          <option value="normal" selected>Mittel</option>
+          <option value="hard">Schwer</option>
+          <option value="insane">Insane</option>
+        </select>
+        <button id="btnMicStart">🎤 Mikro starten</button>
+        <button id="btnMicStop">Mikro stoppen</button>
+        <button id="btnStart">Start</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnRestart">Neu</button>
+      </div>
+
+      <div class="word" id="word">Sag das Wort: —</div>
+
+      <div class="abs">
+        <canvas id="game" width="960" height="540" aria-label="Spielbereich"></canvas>
+        <div class="overlay" id="overlay" hidden>
+          <div class="bubble">
+            <h2 class="title" id="overlayTitle">Voice Jump</h2>
+            <p class="subtitle" id="overlayMsg">Sage das eingeblendete Wort über dein Mikro, um zu springen. Alternativ: <strong>Leertaste</strong>.</p>
+            <div class="row">
+              <button id="overlayStart" class="primary">Los geht's</button>
+              <button id="overlayClose">Schließen</button>
+            </div>
+            <p class="lastspeech" style="margin-top:10px">Tipp: Am besten in Chrome/Edge. Mikro-Zugriff erlauben.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="help">
+        <strong>Steuerung:</strong> Sag das angezeigte Wort deutlich ins Mikro. Mit <strong>Leertaste</strong> kannst du testweise auch so springen.
+        Hindernisse kommen zufällig. Halte so lange wie möglich durch!
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // ----- Word list (deutsch, kurz & klar) -----
+    const WORDS = [
+      "apfel","banane","katze","hund","haus","baum","sonne","mond","stern","fisch","brot","stuhl","tisch","auto","wolke","regen",
+      "schnee","blume","wasser","feuer","erde","wind","buch","tür","fenster","ball","licht","stein","salz","zucker","kaffee","tee",
+      "farbe","blau","grün","rot","gelb","lila","weiß","schwarz","grau","früh","spät","schnell","langsam","hoch","tief","links","rechts",
+      "oben","unten","rein","raus","nah","fern","laut","leise","kalt","warm","heiß","kühl","eis","sand","meer","see","fluss","berg",
+      "tal","wald","weg","stadt","dorf","musik","ton","takt","spiel","level","punkt","sprung","lauf","ziel","start","energie","tempo",
+      "power","boost","laser","pixel","neon","magie","klick","wort","stimme","echo","rhythmus","welle","funke","glanz","strahl","glück"
+    ];
+
+    const randWord = () => WORDS[(Math.random()*WORDS.length)|0];
+
+    // ----- Game setup -----
+    const cvs = document.getElementById('game');
+    const ctx = cvs.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const livesEl = document.getElementById('lives');
+    const speedEl = document.getElementById('speed');
+    const heardEl = document.getElementById('heard');
+    const wordEl = document.getElementById('word');
+    const overlay = document.getElementById('overlay');
+    const overlayStart = document.getElementById('overlayStart');
+    const overlayClose = document.getElementById('overlayClose');
+    const btnStart = document.getElementById('btnStart');
+    const btnPause = document.getElementById('btnPause');
+    const btnRestart = document.getElementById('btnRestart');
+    const diffSel = document.getElementById('difficulty');
+    const micdot = document.getElementById('micdot');
+    const micStatus = document.getElementById('micStatus');
+    const btnMicStart = document.getElementById('btnMicStart');
+    const btnMicStop = document.getElementById('btnMicStop');
+
+    const W = cvs.width, H = cvs.height;
+    const GROUND_Y = H - 60;
+
+    const store = {
+      get best(){ return +localStorage.getItem('vj_best') || 0; },
+      set best(v){ localStorage.setItem('vj_best', String(v)); }
+    };
+    bestEl.textContent = store.best;
+
+    const DIFF = {
+      easy:{ speed: 210, gravity: 1400, jump: 520, spawnMin: 1.2, spawnMax: 1.9, lives: 4 },
+      normal:{ speed: 250, gravity: 1500, jump: 560, spawnMin: 1.0, spawnMax: 1.6, lives: 3 },
+      hard:{ speed: 300, gravity: 1650, jump: 590, spawnMin: .85, spawnMax: 1.4, lives: 3 },
+      insane:{ speed: 360, gravity: 1800, jump: 630, spawnMin: .7, spawnMax: 1.2, lives: 2 },
+    };
+
+    const state = {
+      running:false,
+      gameOver:false,
+      score:0,
+      lives:3,
+      speed:250,
+      gravity:1500,
+      jumpV:560,
+      t:0,
+      lastSpawn:0,
+      nextSpawn:1200,
+      player:{ x:120, y:GROUND_Y, w:34, h:48, vy:0, onGround:true},
+      obst:[],
+      currentWord:"wort",
+      lastHeard:"—",
+      micAvailable: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+      micActive:false,
+      voiceCooldown:0, // seconds until next voice-trigger allowed
+    };
+
+    // ----- Helpers -----
+    const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+    const rand=(a,b)=>Math.random()*(b-a)+a;
+
+    function showOverlay(title, msg){
+      document.getElementById('overlayTitle').textContent = title;
+      document.getElementById('overlayMsg').innerHTML = msg;
+      overlay.removeAttribute('hidden');
+    }
+    function hideOverlay(){ overlay.setAttribute('hidden','hidden'); }
+
+    function setDifficulty(){
+      const d = DIFF[diffSel.value]||DIFF.normal;
+      state.speed = d.speed;
+      state.gravity = d.gravity;
+      state.jumpV = d.jump;
+      state.lives = d.lives;
+      state.nextSpawn = rand(d.spawnMin,d.spawnMax)*1000;
+      livesEl.textContent = state.lives;
+      speedEl.textContent = Math.round(state.speed) + " px/s";
+    }
+
+    function resetGame(){
+      setDifficulty();
+      state.running=false; state.gameOver=false; state.score=0; state.t=0;
+      state.obst.length=0; state.player.x=120; state.player.y=GROUND_Y; state.player.vy=0; state.player.onGround=true;
+      newWord();
+      scoreEl.textContent = 0;
+      showOverlay("Voice Jump", "Sage das eingeblendete Wort über dein Mikro, um zu springen. Alternativ: <b>Leertaste</b>.");
+      drawFrame(0);
+    }
+
+    function startGame(){
+      hideOverlay();
+      if (state.gameOver) resetGame();
+      state.running=true;
+      lastFrame = performance.now();
+      requestAnimationFrame(tick);
+    }
+    function pauseGame(){
+      state.running=false;
+      showOverlay("Pausiert", "Klicke „Weiter“ oder drücke Leertaste.");
+    }
+    function gameOver(){
+      state.running=false; state.gameOver=true;
+      if (state.score>store.best){ store.best=state.score; bestEl.textContent=store.best; }
+      showOverlay("Game Over", `Distanz: ${Math.floor(state.score)} · Bestwert: ${store.best}`);
+    }
+
+    function newWord(){
+      state.currentWord = randWord();
+      wordEl.textContent = `Sag das Wort: „${state.currentWord}“`;
+    }
+
+    function spawnObstacle(){
+      const w = rand(28, 50);
+      const h = rand(40, 72);
+      state.obst.push({ x: W + rand(0, 40), y: GROUND_Y - h, w, h, hit:false });
+      // Update next spawn and word
+      const d = DIFF[diffSel.value]||DIFF.normal;
+      state.nextSpawn = rand(d.spawnMin, d.spawnMax) * 1000;
+      newWord();
+    }
+
+    function jump(){
+      if (state.player.onGround){
+        state.player.vy = -state.jumpV;
+        state.player.onGround = false;
+        voiceBlink();
+      }
+    }
+
+    // Voice feedback blink on border
+    let blinkAlpha = 0;
+    function voiceBlink(){ blinkAlpha = .6; }
+
+    // ----- Input: keyboard fallback -----
+    window.addEventListener('keydown', (e)=>{
+      if (e.code==='Space'){
+        e.preventDefault();
+        if (!state.running){ startGame(); return; }
+        jump();
+      }
+    });
+
+    // Buttons
+    btnStart.addEventListener('click', startGame);
+    btnPause.addEventListener('click', pauseGame);
+    btnRestart.addEventListener('click', ()=>{ resetGame(); startGame(); });
+    overlayStart.addEventListener('click', startGame);
+    overlayClose.addEventListener('click', ()=> hideOverlay());
+    diffSel.addEventListener('change', ()=> resetGame());
+
+    // ----- Mic / SpeechRecognition -----
+    let recognition = null;
+    function updateMicUI(mode='off'){
+      micdot.classList.remove('mic-on','mic-off','mic-err');
+      if (mode==='on'){ micdot.classList.add('mic-on'); micStatus.textContent='Mikro an'; }
+      else if (mode==='err'){ micdot.classList.add('mic-err'); micStatus.textContent='Mikro Fehler'; }
+      else { micdot.classList.add('mic-off'); micStatus.textContent = state.micAvailable ? 'Mikro aus' : 'Kein Sprach-API'; }
+    }
+    updateMicUI('off');
+
+    function initRecognition(){
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR){ state.micAvailable=false; updateMicUI('err'); return; }
+      recognition = new SR();
+      recognition.lang = 'de-DE';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = ()=>{ state.micActive=true; updateMicUI('on'); };
+      recognition.onerror = (e)=>{ console.warn('Speech error', e); updateMicUI('err'); };
+      recognition.onend = ()=>{
+        state.micActive=false; updateMicUI('off');
+        if (state.running && state.wantMic) {
+          try { recognition.start(); } catch {}
+        }
+      };
+      recognition.onresult = (event)=>{
+        let latest = "";
+        for (let i = event.resultIndex; i < event.results.length; i++){
+          const res = event.results[i];
+          const txt = res[0].transcript.trim();
+          latest += txt + (res.isFinal? "" : " ");
+          checkTranscript(txt);
+        }
+        state.lastHeard = latest.trim();
+        heardEl.textContent = state.lastHeard || "—";
+      };
+    }
+
+    function checkTranscript(txt){
+      if (!txt) return;
+      if (state.voiceCooldown > 0) return;
+      const t = txt.toLowerCase();
+      const w = state.currentWord.toLowerCase();
+      const hit = t.split(/[^a-zäöüß]+/i).includes(w);
+      if (hit){
+        state.voiceCooldown = 0.65; // seconds
+        jump();
+      }
+    }
+
+    btnMicStart.addEventListener('click', ()=>{
+      if (!recognition) initRecognition();
+      if (!recognition) return;
+      try {
+        state.wantMic = true;
+        recognition.start();
+      } catch {}
+    });
+    btnMicStop.addEventListener('click', ()=>{
+      state.wantMic = false;
+      try { recognition && recognition.stop(); } catch {}
+    });
+
+    // ----- Physics & Update -----
+    let lastFrame = performance.now();
+
+    function update(dt){
+      // cooldown
+      state.voiceCooldown = Math.max(0, state.voiceCooldown - dt);
+
+      // distance / score
+      state.score += state.speed * dt * 0.25; // scaled for nicer numbers
+      scoreEl.textContent = Math.floor(state.score);
+      if (state.score>store.best){ bestEl.textContent = Math.floor(state.score); }
+
+      // spawn obstacles
+      state.lastSpawn += dt*1000;
+      if (state.lastSpawn >= state.nextSpawn){
+        state.lastSpawn = 0;
+        spawnObstacle();
+      }
+
+      // move obstacles
+      for (let i = state.obst.length - 1; i >= 0; i--){
+        const o = state.obst[i];
+        o.x -= state.speed * dt;
+        if (o.x + o.w < -10) state.obst.splice(i,1);
+      }
+
+      // gravity & player
+      state.player.vy += state.gravity * dt;
+      state.player.y += state.player.vy * dt;
+      if (state.player.y >= GROUND_Y){
+        state.player.y = GROUND_Y;
+        state.player.vy = 0;
+        state.player.onGround = true;
+      }
+
+      // collisions
+      for (let i = state.obst.length - 1; i >= 0; i--){
+        const o = state.obst[i];
+        if (hitRect(state.player, o)){
+          state.obst.splice(i,1);
+          state.lives -= 1;
+          livesEl.textContent = state.lives;
+          screenFlash('#ff6b6b');
+          if (state.lives <= 0){ gameOver(); return; }
+          newWord();
+        }
+      }
+    }
+
+    function hitRect(p,o){
+      const px1 = p.x - p.w/2, px2 = p.x + p.w/2;
+      const py1 = p.y - p.h, py2 = p.y;
+      const ox1 = o.x, ox2 = o.x + o.w;
+      const oy1 = o.y, oy2 = o.y + o.h;
+      return px1 < ox2 && px2 > ox1 && py1 < oy2 && py2 > oy1;
+    }
+
+    // ----- Render -----
+    let flashAlpha = 0, flashColor = '#fff';
+    function screenFlash(c){ flashColor=c; flashAlpha=.35; }
+
+    function drawFrame(dt){
+      ctx.clearRect(0,0,W,H);
+
+      // parallax background
+      const t = state.t * 0.04;
+      ctx.save();
+      for (let layer=0; layer<3; layer++){
+        const speedMul = (layer+1)*0.2;
+        const y = 60 + layer*50;
+        ctx.globalAlpha = 0.12 + layer*0.08;
+        ctx.fillStyle = ['#a4e5ff','#7cc6ff','#7dffb0'][layer%3];
+        for (let i=0;i<18;i++){
+          const x = ((i*120) - (t*state.speed*speedMul)) % (W+120);
+          ctx.fillRect(x, y + Math.sin((i+t)*0.6)*8, 80, 6);
+        }
+      }
+      ctx.restore();
+
+      // ground
+      ctx.fillStyle = '#0e1327';
+      ctx.fillRect(0,GROUND_Y+1,W,H - GROUND_Y);
+      for (let i=0;i<W;i+=26){
+        ctx.fillStyle = i%52===0 ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.03)';
+        ctx.fillRect(i,GROUND_Y,18,4);
+      }
+
+      // obstacles
+      for (const o of state.obst){
+        ctx.fillStyle = '#ff9f7d';
+        roundRect(o.x, o.y, o.w, o.h, 8);
+        ctx.fill();
+        // shadow
+        ctx.globalAlpha = .18;
+        ctx.beginPath();
+        ctx.ellipse(o.x + o.w/2, GROUND_Y+10, o.w*.8, 10, 0, 0, Math.PI*2);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // player
+      const p = state.player;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      // body
+      const grd = ctx.createLinearGradient(-17, -48, 17, 0);
+      grd.addColorStop(0, '#7cc6ff');
+      grd.addColorStop(1, '#7dffb0');
+      ctx.fillStyle = grd;
+      roundRect(-p.w/2, -p.h, p.w, p.h, 10);
+      ctx.fill();
+      // head
+      ctx.beginPath();
+      ctx.arc(0, -p.h - 10, 14, 0, Math.PI*2);
+      ctx.fillStyle = '#eaf6ff';
+      ctx.fill();
+      // eye
+      ctx.fillStyle = '#0a0f1f';
+      ctx.fillRect(-4, -p.h - 13, 8, 4);
+      // shadow
+      ctx.globalAlpha = .15;
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 30, 10, 0, 0, Math.PI*2);
+      ctx.fillStyle = '#000';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+
+      // mic voice blink border
+      if (blinkAlpha > 0){
+        ctx.save();
+        ctx.globalAlpha = blinkAlpha;
+        ctx.strokeStyle = '#7dffb0';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(6,6,W-12,H-12);
+        ctx.restore();
+        blinkAlpha *= 0.9;
+      }
+
+      // flash
+      if (flashAlpha > 0){
+        ctx.save();
+        ctx.globalAlpha = flashAlpha;
+        ctx.fillStyle = flashColor;
+        ctx.fillRect(0,0,W,H);
+        ctx.restore();
+        flashAlpha *= 0.9;
+      }
+    }
+
+    function roundRect(x,y,w,h,r){
+      const rr = Math.min(r, w/2, h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr,y);
+      ctx.arcTo(x+w,y,x+w,y+h,rr);
+      ctx.arcTo(x+w,y+h,x,y+h,rr);
+      ctx.arcTo(x,y+h,x,y,rr);
+      ctx.arcTo(x,y,x+w,y,rr);
+      ctx.closePath();
+    }
+
+    // ----- Loop -----
+    function tick(now){
+      if (!state.running) return;
+      const dt = Math.min(0.033, (now - lastFrame)/1000);
+      lastFrame = now;
+      state.t += dt*1000;
+
+      update(dt);
+      drawFrame(dt);
+
+      requestAnimationFrame(tick);
+    }
+
+    // Init
+    resetGame();
+    if (state.micAvailable){ initRecognition(); }
+  </script>
+</body>
+</html>
