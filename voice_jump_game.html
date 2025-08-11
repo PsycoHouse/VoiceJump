@@ -67,9 +67,9 @@
 
     <script>
     const SPELLS=[
-      "Mit funkelnder Stimme flehe ich die Kräfte des Mondes der Sterne des Windes und der Erde an diese Kugel der Macht zu formen und meine Feinde zu zerschmettern",
-      "Durch alte Worte und ewige Runen lenke ich das Licht der Elemente auf dass diese strahlende Sphäre die Dunkelheit vertreibe und unsere Herzen mit Mut erfülle",
-      "Oh Quellen des Lebens hört meinen Ruf und webt aus Feuer Wasser Luft und Stein einen kreisenden Ball der uns schützt und jeden Gegner in die Flucht schlägt"
+      "Mit funkelnder Stimme flehe ich die Kräfte des Mondes, der Sterne, des Windes und der Erde an, diese Kugel der Macht zu formen und meine Feinde zu zerschmettern.",
+      "Durch alte Worte und ewige Runen lenke ich das Licht der Elemente, auf dass diese strahlende Sphäre die Dunkelheit vertreibe und unsere Herzen mit Mut erfülle.",
+      "Oh, Quellen des Lebens, hört meinen Ruf und webt aus Feuer, Wasser, Luft und Stein einen kreisenden Ball, der uns schützt und jeden Gegner in die Flucht schlägt."
     ];
 
     const sentenceEl=document.getElementById('sentence');
@@ -115,10 +115,9 @@
       }
       return {correct:i,total:exp.length};
     }
-    function shoot(correct,total){
-      const ratio=correct/total;
+    function shoot(ratio){
       const r=10+ratio*40;
-      state.ball={x:wizardPos.x,y:wizardPos.y-30,r:r,damage:correct*5};
+      state.ball={x:wizardPos.x,y:wizardPos.y-30,r:r,damage:Math.round(ratio*100)};
       state.canCast=false;
       energyFill.style.width=ratio*100+"%";
     }
@@ -131,7 +130,6 @@
           state.ball=null;
           state.canCast=true;
           newSpell();
-          if(state.wantMic){try{recognition.start();}catch{}}
         }
       }
     }
@@ -185,7 +183,7 @@
       recognition.interimResults=true;
       recognition.onstart=()=>{state.micActive=true;updateMicUI('on');};
       recognition.onerror=e=>{console.warn('Speech error',e);updateMicUI('err');};
-        recognition.onend=()=>{state.micActive=false;updateMicUI('off');if(state.wantMic&&state.canCast){try{recognition.start();}catch{}}};
+      recognition.onend=()=>{state.micActive=false;updateMicUI('off');if(state.wantMic){try{recognition.start();}catch{}}};
       recognition.onresult=event=>{
         for(let i=event.resultIndex;i<event.results.length;i++){
           const res=event.results[i];
@@ -193,10 +191,10 @@
           if(res.isFinal && state.canCast){
             heardEl.textContent=txt||'–';
             const {correct,total}=compareSpell(state.currentText,txt);
-            const dmg=correct*5;
+            const ratio=correct/total;
+            const dmg=Math.round(ratio*100);
             missedEl.textContent=`Korrekt: ${correct}/${total} – Schaden: ${dmg}`;
-            shoot(correct,total);
-            recognition.stop();
+            shoot(ratio);
           }
         }
       };
