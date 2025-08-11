@@ -44,7 +44,7 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>🎙️ Voice Wizard <span class="badge">Lies den Text!</span></h1>
+        <h1>🎙️ Voice Wizard <span class="badge">Sprich den Zauberspruch!</span></h1>
       <div>
         <span class="micdot mic-off" id="micdot" aria-hidden="true"></span>
         <span id="micStatus">Mikro aus</span>
@@ -65,13 +65,11 @@
     </div>
   </div>
 
-  <script>
-    const TEXTS=[
-      "Der schnelle braune Fuchs springt über den faulen Hund.",
-      "Ich trinke gerne heißen Kaffee am Morgen.",
-      "In Berlin steht der Fernsehturm am Alexanderplatz.",
-      "Programmieren macht Spaß und fordert den Geist.",
-      "Heute ist ein guter Tag für ein Abenteuer im Wald."
+    <script>
+    const SPELLS=[
+      "Mit funkelnder Stimme flehe ich die Kräfte des Mondes der Sterne des Windes und der Erde an diese Kugel der Macht zu formen und meine Feinde zu zerschmettern",
+      "Durch alte Worte und ewige Runen lenke ich das Licht der Elemente auf dass diese strahlende Sphäre die Dunkelheit vertreibe und unsere Herzen mit Mut erfülle",
+      "Oh Quellen des Lebens hört meinen Ruf und webt aus Feuer Wasser Luft und Stein einen kreisenden Ball der uns schützt und jeden Gegner in die Flucht schlägt"
     ];
 
     const sentenceEl=document.getElementById('sentence');
@@ -94,59 +92,47 @@
 
     let recognition=null;
     const state={
-      energy:0,
       damage:0,
       currentText:"",
       ball:null,
       micAvailable:!!(window.SpeechRecognition||window.webkitSpeechRecognition),
       micActive:false,
-      wantMic:false
+      wantMic:false,
+      canCast:true
     };
 
-    function randText(){return TEXTS[(Math.random()*TEXTS.length)|0];}
-    function newSentence(){state.currentText=randText(); sentenceEl.textContent=state.currentText;}
+    function randSpell(){return SPELLS[(Math.random()*SPELLS.length)|0];}
+    function newSpell(){state.currentText=randSpell(); sentenceEl.textContent=state.currentText;}
     function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-    function updateEnergy(){energyFill.style.width=state.energy+"%";}
     function updateDamage(){damageFill.style.width=state.damage+"%";}
-    function levenshtein(a,b){
-      const m=a.length,n=b.length;
-      const dp=Array.from({length:m+1},()=>Array(n+1).fill(0));
-      for(let i=0;i<=m;i++)dp[i][0]=i;
-      for(let j=0;j<=n;j++)dp[0][j]=j;
-      for(let i=1;i<=m;i++){
-        for(let j=1;j<=n;j++){
-          const cost=a[i-1]===b[j-1]?0:1;
-          dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+cost);
-        }
-      }
-      return dp[m][n];
-    }
-    function similarity(a,b){
-      const dist=levenshtein(a.toLowerCase(),b.toLowerCase());
-      const maxLen=Math.max(a.length,b.length);
-      return maxLen?1-dist/maxLen:0;
-    }
-    function addEnergy(acc){
-      state.energy=clamp(state.energy+acc*100,0,100);
-      updateEnergy();
-      if(state.energy>=100){shoot();}
-    }
     function addDamage(amount){state.damage=clamp(state.damage+amount,0,100);updateDamage();}
-    function diffWords(expected,actual){
+    function compareSpell(expected,actual){
       const clean=s=>s.toLowerCase().replace(/[^\wäöüß ]/g,'').split(/\s+/).filter(Boolean);
       const exp=clean(expected),act=clean(actual);
-      return exp.filter(w=>!act.includes(w));
+      let i=0;
+      for(;i<exp.length&&i<act.length;i++){
+        if(exp[i]!==act[i]) break;
+      }
+      return {correct:i,total:exp.length};
     }
-    function shoot(){
-      const r=10+state.energy*0.4;
-      state.ball={x:wizardPos.x,y:wizardPos.y-30,r:r};
-      state.energy=0; updateEnergy();
+    function shoot(correct,total){
+      const ratio=correct/total;
+      const r=10+ratio*40;
+      state.ball={x:wizardPos.x,y:wizardPos.y-30,r:r,damage:correct*5};
+      state.canCast=false;
+      energyFill.style.width=ratio*100+"%";
     }
 
     function update(dt){
       if(state.ball){
         state.ball.x+=400*dt;
-        if(state.ball.x>=targetPos.x){state.ball=null;addDamage(20);}
+        if(state.ball.x>=targetPos.x){
+          addDamage(state.ball.damage);
+          state.ball=null;
+          state.canCast=true;
+          newSpell();
+          if(state.wantMic){try{recognition.start();}catch{}}
+        }
       }
     }
     function roundRect(x,y,w,h,r){const rr=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+rr,y);ctx.arcTo(x+w,y,x+w,y+h,rr);ctx.arcTo(x+w,y+h,x,y+h,rr);ctx.arcTo(x,y+h,x,y,rr);ctx.arcTo(x,y,x+w,y,rr);ctx.closePath();}
@@ -199,17 +185,18 @@
       recognition.interimResults=true;
       recognition.onstart=()=>{state.micActive=true;updateMicUI('on');};
       recognition.onerror=e=>{console.warn('Speech error',e);updateMicUI('err');};
-      recognition.onend=()=>{state.micActive=false;updateMicUI('off');if(state.wantMic){try{recognition.start();}catch{}}};
+        recognition.onend=()=>{state.micActive=false;updateMicUI('off');if(state.wantMic&&state.canCast){try{recognition.start();}catch{}}};
       recognition.onresult=event=>{
         for(let i=event.resultIndex;i<event.results.length;i++){
           const res=event.results[i];
           const txt=res[0].transcript.trim();
-          if(res.isFinal){
+          if(res.isFinal && state.canCast){
             heardEl.textContent=txt||'–';
-            const wrong=diffWords(state.currentText,txt);
-            missedEl.textContent=wrong.length?('Fehler: '+wrong.join(', ')):'Keine Fehler';
-            addEnergy(similarity(state.currentText,txt));
-            newSentence();
+            const {correct,total}=compareSpell(state.currentText,txt);
+            const dmg=correct*5;
+            missedEl.textContent=`Korrekt: ${correct}/${total} – Schaden: ${dmg}`;
+            shoot(correct,total);
+            recognition.stop();
           }
         }
       };
@@ -225,7 +212,7 @@
       try{recognition&&recognition.stop();}catch{}
     });
 
-    newSentence();
-  </script>
+    newSpell();
+    </script>
 </body>
 </html>
