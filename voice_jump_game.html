@@ -92,20 +92,26 @@
 
     let recognition=null;
     const state={
-      damage:0,
       currentText:"",
       ball:null,
       micAvailable:!!(window.SpeechRecognition||window.webkitSpeechRecognition),
       micActive:false,
       wantMic:false,
-      canCast:true
+      canCast:true,
+      enemyMaxHP:100,
+      enemyHP:100,
+      enemyColor:'#ff9f7d',
+      enemyDefeated:false
     };
 
     function randSpell(){return SPELLS[(Math.random()*SPELLS.length)|0];}
     function newSpell(){state.currentText=randSpell(); sentenceEl.textContent=state.currentText;}
     function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-    function updateDamage(){damageFill.style.width=state.damage+"%";}
-    function addDamage(amount){state.damage=clamp(state.damage+amount,0,100);updateDamage();}
+    function randomColor(){return `hsl(${Math.random()*360},70%,70%)`;}
+    function updateDamage(){const ratio=1-state.enemyHP/state.enemyMaxHP;damageFill.style.width=ratio*100+"%";}
+    function addDamage(amount){state.enemyHP=clamp(state.enemyHP-amount,0,state.enemyMaxHP);updateDamage();if(state.enemyHP<=0&&!state.enemyDefeated){state.enemyDefeated=true;defeatEnemy();}}
+    function defeatEnemy(){missedEl.textContent='Gegner besiegt!';setTimeout(()=>{missedEl.textContent='';spawnEnemy();state.enemyDefeated=false;state.canCast=true;newSpell();},1000);}
+    function spawnEnemy(first=false){if(!first)state.enemyMaxHP=Math.round(state.enemyMaxHP*1.5);state.enemyHP=state.enemyMaxHP;state.enemyColor=randomColor();updateDamage();}
     function compareSpell(expected,actual){
       const clean=s=>s.toLowerCase().replace(/[^\wäöüß ]/g,'').split(/\s+/).filter(Boolean);
       const exp=clean(expected),act=clean(actual);
@@ -128,8 +134,7 @@
         if(state.ball.x>=targetPos.x){
           addDamage(state.ball.damage);
           state.ball=null;
-          state.canCast=true;
-          newSpell();
+          if(!state.enemyDefeated){state.canCast=true;newSpell();}
         }
       }
     }
@@ -147,11 +152,13 @@
         ctx.beginPath();ctx.moveTo(wizardPos.x,wizardPos.y-120);ctx.lineTo(wizardPos.x-20,wizardPos.y-90);ctx.lineTo(wizardPos.x+20,wizardPos.y-90);ctx.closePath();ctx.fill();
       }
       // target
-      if(enemyImg.src){
-        ctx.drawImage(enemyImg,targetPos.x-40,targetPos.y-120,80,120);
-      }else{
-        ctx.fillStyle='#ff9f7d';
-        roundRect(targetPos.x-20,targetPos.y-60,40,60,10);ctx.fill();
+      if(!state.enemyDefeated){
+        if(enemyImg.src){
+          ctx.drawImage(enemyImg,targetPos.x-40,targetPos.y-120,80,120);
+        }else{
+          ctx.fillStyle=state.enemyColor;
+          roundRect(targetPos.x-20,targetPos.y-60,40,60,10);ctx.fill();
+        }
       }
       // ball
       if(state.ball){
@@ -211,6 +218,7 @@
     });
 
     newSpell();
+    spawnEnemy(true);
     </script>
 </body>
 </html>
