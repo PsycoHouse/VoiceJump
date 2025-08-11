@@ -246,10 +246,9 @@
       const w = rand(28, 50);
       const h = rand(40, 72);
       state.obst.push({ x: W + rand(0, 40), y: GROUND_Y - h, w, h, hit:false });
-      // Update next spawn and word
+      // Update next spawn timing
       const d = DIFF[diffSel.value]||DIFF.normal;
       state.nextSpawn = rand(d.spawnMin, d.spawnMax) * 1000;
-      newWord();
     }
 
     function jump(){
@@ -329,6 +328,7 @@
       if (hit){
         state.voiceCooldown = 0.65; // seconds
         jump();
+        newWord();
       }
     }
 
@@ -389,7 +389,6 @@
           livesEl.textContent = state.lives;
           screenFlash('#ff6b6b');
           if (state.lives <= 0){ gameOver(); return; }
-          newWord();
         }
       }
     }
