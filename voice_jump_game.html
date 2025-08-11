@@ -35,7 +35,10 @@
     .sentence{font-weight:700;font-size:clamp(1rem,3vw,1.6rem);text-align:center;margin-top:10px}
     .energy-bar{height:28px;border:1px solid rgba(255,255,255,.15);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.05);margin-top:10px}
     #energyFill{height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--ok))}
+    .damage-bar{height:28px;border:1px solid rgba(255,255,255,.15);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.05);margin-top:10px}
+    #damageFill{height:100%;width:0;background:linear-gradient(90deg,#ff7d7d,#ffb07d)}
     .lastspeech{color:var(--muted);font-size:.95rem;margin-top:6px}
+    .missed{color:#ff9f7d;font-size:.95rem;margin-top:4px}
   </style>
 </head>
 <body>
@@ -51,11 +54,13 @@
     <div class="panel">
       <div class="sentence" id="sentence">–</div>
       <div class="energy-bar"><div id="energyFill"></div></div>
+      <div class="damage-bar"><div id="damageFill"></div></div>
       <div class="controls">
         <button id="btnMicStart">🎤 Mikro starten</button>
         <button id="btnMicStop">Mikro stoppen</button>
       </div>
       <div class="lastspeech" id="heard">–</div>
+      <div class="missed" id="missed"> </div>
       <canvas id="game" width="960" height="540" aria-label="Spielbereich"></canvas>
     </div>
   </div>
@@ -71,7 +76,9 @@
 
     const sentenceEl=document.getElementById('sentence');
     const energyFill=document.getElementById('energyFill');
+    const damageFill=document.getElementById('damageFill');
     const heardEl=document.getElementById('heard');
+    const missedEl=document.getElementById('missed');
     const micdot=document.getElementById('micdot');
     const micStatus=document.getElementById('micStatus');
     const btnMicStart=document.getElementById('btnMicStart');
@@ -82,10 +89,13 @@
     const W=cvs.width,H=cvs.height;
     const wizardPos={x:100,y:H-80};
     const targetPos={x:W-100,y:H-80};
+    const wizardImg=new Image(); // wizardImg.src='pfad/zum/zauberer.png';
+    const enemyImg=new Image(); // enemyImg.src='pfad/zum/gegner.png';
 
     let recognition=null;
     const state={
       energy:0,
+      damage:0,
       currentText:"",
       ball:null,
       micAvailable:!!(window.SpeechRecognition||window.webkitSpeechRecognition),
@@ -97,6 +107,7 @@
     function newSentence(){state.currentText=randText(); sentenceEl.textContent=state.currentText;}
     function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
     function updateEnergy(){energyFill.style.width=state.energy+"%";}
+    function updateDamage(){damageFill.style.width=state.damage+"%";}
     function levenshtein(a,b){
       const m=a.length,n=b.length;
       const dp=Array.from({length:m+1},()=>Array(n+1).fill(0));
@@ -120,6 +131,12 @@
       updateEnergy();
       if(state.energy>=100){shoot();}
     }
+    function addDamage(amount){state.damage=clamp(state.damage+amount,0,100);updateDamage();}
+    function diffWords(expected,actual){
+      const clean=s=>s.toLowerCase().replace(/[^\wäöüß ]/g,'').split(/\s+/).filter(Boolean);
+      const exp=clean(expected),act=clean(actual);
+      return exp.filter(w=>!act.includes(w));
+    }
     function shoot(){
       const r=10+state.energy*0.4;
       state.ball={x:wizardPos.x,y:wizardPos.y-30,r:r};
@@ -129,21 +146,29 @@
     function update(dt){
       if(state.ball){
         state.ball.x+=400*dt;
-        if(state.ball.x>=targetPos.x){state.ball=null;}
+        if(state.ball.x>=targetPos.x){state.ball=null;addDamage(20);}
       }
     }
     function roundRect(x,y,w,h,r){const rr=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+rr,y);ctx.arcTo(x+w,y,x+w,y+h,rr);ctx.arcTo(x+w,y+h,x,y+h,rr);ctx.arcTo(x,y+h,x,y,rr);ctx.arcTo(x,y,x+w,y,rr);ctx.closePath();}
     function draw(){
       ctx.clearRect(0,0,W,H);
       // wizard
-      ctx.fillStyle='#7cc6ff';
-      roundRect(wizardPos.x-20,wizardPos.y-60,40,60,10);ctx.fill();
-      ctx.beginPath();ctx.arc(wizardPos.x,wizardPos.y-70,14,0,Math.PI*2);ctx.fillStyle='#eaf6ff';ctx.fill();
-      ctx.fillStyle='#0a0f1f';ctx.fillRect(wizardPos.x-25,wizardPos.y-90,50,10);
-      ctx.beginPath();ctx.moveTo(wizardPos.x,wizardPos.y-120);ctx.lineTo(wizardPos.x-20,wizardPos.y-90);ctx.lineTo(wizardPos.x+20,wizardPos.y-90);ctx.closePath();ctx.fill();
+      if(wizardImg.src){
+        ctx.drawImage(wizardImg,wizardPos.x-40,wizardPos.y-120,80,120);
+      }else{
+        ctx.fillStyle='#7cc6ff';
+        roundRect(wizardPos.x-20,wizardPos.y-60,40,60,10);ctx.fill();
+        ctx.beginPath();ctx.arc(wizardPos.x,wizardPos.y-70,14,0,Math.PI*2);ctx.fillStyle='#eaf6ff';ctx.fill();
+        ctx.fillStyle='#0a0f1f';ctx.fillRect(wizardPos.x-25,wizardPos.y-90,50,10);
+        ctx.beginPath();ctx.moveTo(wizardPos.x,wizardPos.y-120);ctx.lineTo(wizardPos.x-20,wizardPos.y-90);ctx.lineTo(wizardPos.x+20,wizardPos.y-90);ctx.closePath();ctx.fill();
+      }
       // target
-      ctx.fillStyle='#ff9f7d';
-      roundRect(targetPos.x-20,targetPos.y-60,40,60,10);ctx.fill();
+      if(enemyImg.src){
+        ctx.drawImage(enemyImg,targetPos.x-40,targetPos.y-120,80,120);
+      }else{
+        ctx.fillStyle='#ff9f7d';
+        roundRect(targetPos.x-20,targetPos.y-60,40,60,10);ctx.fill();
+      }
       // ball
       if(state.ball){
         const b=state.ball;
@@ -179,7 +204,13 @@
         for(let i=event.resultIndex;i<event.results.length;i++){
           const res=event.results[i];
           const txt=res[0].transcript.trim();
-          if(res.isFinal){heardEl.textContent=txt||'–'; addEnergy(similarity(state.currentText,txt)); newSentence();}
+          if(res.isFinal){
+            heardEl.textContent=txt||'–';
+            const wrong=diffWords(state.currentText,txt);
+            missedEl.textContent=wrong.length?('Fehler: '+wrong.join(', ')):'Keine Fehler';
+            addEnergy(similarity(state.currentText,txt));
+            newSentence();
+          }
         }
       };
     }
